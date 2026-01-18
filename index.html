@@ -3,14 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>heem made this shi</title>
+  <title>heem was here</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="game">
     <header class="header">
-      <h1 class="title">Heems Clicking Game </h1>
-      <button id="open-shop" class="shop-toggle">Upgrades Shop</button>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h1 class="title">Heems Clicking Game</h1>
+        <div id="rebirth-info" class="rebirth-info">Rebirths: <span id="rebirth-count">0</span> (<span id="rebirth-mul">x1.0</span>)</div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="open-shop" class="shop-toggle">Upgrades Shop</button>
+        <button id="open-badges" class="shop-toggle">Badges</button>
+        <button id="open-rebirth" class="shop-toggle danger">Rebirth</button>
+      </div>
     </header>
 
     <div class="panel">
@@ -21,7 +29,7 @@
 
       <button id="clicker" class="btn">click me</button>
 
-      <div class="info">Every click = +$1 — Press space to click</div>
+      <div class="info">Every click = +$1 — Press space to click — Press S to open shop</div>
     </div>
   </main>
 
@@ -33,14 +41,63 @@
         <button id="close-shop" class="close-btn" aria-label="Close shop">✕</button>
       </div>
 
-      <div id="shop-balance" class="shop-balance">$0</div>
+      <div class="shop-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div id="shop-balance" class="shop-balance">$0</div>
+        <div class="shop-pager">
+          <button id="prev-page" class="ghost-btn">‹ Prev</button>
+          <span id="page-indicator" style="font-weight:700;color:#cfe3ff;margin:0 8px">Page 1 / 5</span>
+          <button id="next-page" class="ghost-btn">Next ›</button>
+        </div>
+      </div>
 
-      <div id="upgrades-list" class="upgrades-list">
+      <div id="upgrades-list" class="upgrades-list" style="margin-top:12px;">
         <!-- upgrades inserted here -->
       </div>
 
-      <div class="shop-footer">
+      <div class="shop-footer" style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:12px;">
+        <div style="color:var(--muted)">Click stats: base / multiplier / rebirth</div>
         <button id="close-shop-2" class="ghost-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Badges modal -->
+  <div id="badges-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel">
+      <div class="shop-header">
+        <h2 id="badges-title">Badges</h2>
+        <button id="close-badges" class="close-btn">✕</button>
+      </div>
+
+      <div id="badges-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding-top:8px;">
+        <!-- badges -->
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button id="close-badges-2" class="ghost-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rebirth modal -->
+  <div id="rebirth-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel">
+      <div class="shop-header">
+        <h2 id="rebirth-title">Rebirth</h2>
+        <button id="close-rebirth" class="close-btn">✕</button>
+      </div>
+
+      <div style="padding:8px 0;">
+        <div id="rebirth-desc" style="color:var(--muted)"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+          <div style="font-weight:700">Current rebirths: <span id="rebirth-count-2">0</span></div>
+          <div style="font-weight:700">Reward: <span id="rebirth-reward">+10% per rebirth</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+        <button id="confirm-rebirth" class="buy-btn danger">Confirm Rebirth</button>
+        <button id="cancel-rebirth" class="ghost-btn">Cancel</button>
       </div>
     </div>
   </div>
