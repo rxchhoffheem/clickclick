@@ -7,7 +7,7 @@
   --glass-outline: rgba(255,255,255,0.04);
   --text: #dbe7f6;
   --muted: rgba(215,230,255,0.6);
-  --shop-bg: rgba(6,10,18,0.85);
+  --shop-bg: rgba(6,10,18,0.95);
   --card: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   --positive: #8fffb0;
   --danger: #ff6b6b;
@@ -32,7 +32,7 @@ body{
 .game{
   text-align:center;
   width:100%;
-  max-width:760px;
+  max-width:920px;
   padding:24px;
 }
 
@@ -53,6 +53,8 @@ body{
   text-align:left;
 }
 
+.rebirth-info{ color:var(--muted); font-weight:700; }
+
 .shop-toggle{
   background: transparent;
   color: var(--muted);
@@ -64,6 +66,8 @@ body{
   transition:transform .12s;
 }
 .shop-toggle:hover{ transform:translateY(-3px); color: #fff; }
+
+.shop-toggle.danger{ border-color: rgba(255,100,100,0.12); color:#ffbdbd; }
 
 .panel{
   background: var(--panel);
@@ -135,7 +139,7 @@ body{
 
 .shop-panel{
   width:100%;
-  max-width:920px;
+  max-width:980px;
   background: var(--shop-bg);
   border-radius:14px;
   padding:18px;
@@ -213,6 +217,21 @@ body{
   border:1px solid rgba(140,255,180,0.06);
 }
 
+/* badges */
+.badge{
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius:10px;
+  padding:10px;
+  border:1px solid rgba(255,255,255,0.03);
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.badge .b-left{
+  width:46px;height:46px;border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;font-weight:800;
+}
+.badge.locked{ opacity:0.45; }
+
 /* ghost close */
 .ghost-btn{
   background:transparent;
@@ -224,8 +243,11 @@ body{
 }
 .ghost-btn:hover{ color:#fff; transform:translateY(-2px); }
 
+/* danger btn */
+.buy-btn.danger{ background: linear-gradient(180deg,#ff9b9b,#ff6b6b); color:#201; }
+
 /* responsive */
-@media (max-width:540px){
+@media (max-width:640px){
   .upgrades-list{ grid-template-columns: 1fr; }
   .btn{ padding:14px 28px; font-size:18px; }
   .money{ font-size:28px; }
