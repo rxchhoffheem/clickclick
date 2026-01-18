@@ -1,4 +1,4 @@
-// Main clicker with multi-buy upgrades, pagination (pages of upgrades), badges, and rebirths.
+// Main clicker with multi-buy upgrades, pagination (pages of upgrades), badges, rebirths, and admin auth/commands.
 // Persistent state held in localStorage under key 'sim_state_v2'
 
 const CLICKER = document.getElementById('clicker');
@@ -33,6 +33,21 @@ const REBIRTH_MUL_EL = document.getElementById('rebirth-mul');
 const REBIRTH_DESC = document.getElementById('rebirth-desc');
 const REBIRTH_REWARD_EL = document.getElementById('rebirth-reward');
 
+// Admin/auth DOM
+const ADMIN_BTN = document.getElementById('admin-toggle-btn');
+const AUTH_OVERLAY = document.getElementById('auth-overlay');
+const AUTH_INPUT = document.getElementById('auth-input');
+const AUTH_SUBMIT = document.getElementById('auth-submit');
+const CLOSE_AUTH = document.getElementById('close-auth');
+
+const ADMIN_OVERLAY = document.getElementById('admin-overlay');
+const ADMIN_ADD_INPUT = document.getElementById('admin-add-input');
+const ADMIN_ADD_BTN = document.getElementById('admin-add-btn');
+const ADMIN_SET_INPUT = document.getElementById('admin-set-input');
+const ADMIN_SET_BTN = document.getElementById('admin-set-btn');
+const ADMIN_LOCK_BTN = document.getElementById('admin-lock-btn');
+const CLOSE_ADMIN = document.getElementById('close-admin');
+
 const STORAGE_KEY = 'sim_state_v2';
 
 // Pagination
@@ -46,7 +61,8 @@ let state = {
   rebirths: 0,
   totalClicks: 0,
   totalEarned: 0,
-  badgesEarned: [] // badge ids
+  badgesEarned: [], // badge ids
+  adminUnlocked: false // persisted admin unlock state
 };
 
 // derived stats
@@ -249,7 +265,6 @@ function buyUpgrade(id){
   if (state.money < cost) return;
   state.money -= cost;
   state.purchased[id] = count + 1;
-  state.totalEarned = state.totalEarned; // no change (we track money and totalEarned separately)
   saveState();
   recomputeFromPurchased();
   renderShop();
@@ -434,6 +449,99 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
+// --- Admin/auth logic ---
+
+// show auth prompt (enter code)
+function openAuth(){
+  AUTH_OVERLAY.classList.remove('hidden');
+  AUTH_OVERLAY.setAttribute('aria-hidden','false');
+  AUTH_INPUT.value = '';
+  AUTH_INPUT.focus();
+}
+function closeAuth(){
+  AUTH_OVERLAY.classList.add('hidden');
+  AUTH_OVERLAY.setAttribute('aria-hidden','true');
+}
+
+// show admin panel if unlocked
+function openAdmin(){
+  ADMIN_OVERLAY.classList.remove('hidden');
+  ADMIN_OVERLAY.setAttribute('aria-hidden','false');
+  ADMIN_ADD_INPUT.value = '';
+  ADMIN_SET_INPUT.value = '';
+}
+function closeAdmin(){
+  ADMIN_OVERLAY.classList.add('hidden');
+  ADMIN_OVERLAY.setAttribute('aria-hidden','true');
+}
+
+// when auth submitted
+AUTH_SUBMIT.addEventListener('click', ()=>{
+  const code = (AUTH_INPUT.value || '').trim();
+  if (code.toUpperCase() === 'HEEM'){
+    state.adminUnlocked = true;
+    saveState();
+    closeAuth();
+    flashMoney('Admin unlocked');
+    openAdmin();
+  } else {
+    flashMoney('Invalid code');
+    AUTH_INPUT.value = '';
+    AUTH_INPUT.focus();
+  }
+});
+AUTH_INPUT.addEventListener('keydown', (e)=>{
+  if (e.key === 'Enter') AUTH_SUBMIT.click();
+});
+CLOSE_AUTH.addEventListener('click', closeAuth);
+
+// floating admin button behavior
+ADMIN_BTN.addEventListener('click', ()=>{
+  if (state.adminUnlocked) openAdmin();
+  else openAuth();
+});
+
+// admin commands
+ADMIN_ADD_BTN.addEventListener('click', ()=>{
+  const val = Number(ADMIN_ADD_INPUT.value);
+  if (!isFinite(val) || val === 0){
+    flashMoney('Enter a valid number');
+    return;
+  }
+  const amount = Math.floor(val);
+  state.money += amount;
+  state.totalEarned += Math.max(0, amount);
+  saveState();
+  updateMoneyUI();
+  flashMoney(`${fmt(amount)} added`);
+  ADMIN_ADD_INPUT.value = '';
+});
+
+ADMIN_SET_BTN.addEventListener('click', ()=>{
+  const val = Number(ADMIN_SET_INPUT.value);
+  if (!isFinite(val) || val < 0){
+    flashMoney('Enter a valid non-negative number');
+    return;
+  }
+  state.money = Math.floor(val);
+  saveState();
+  updateMoneyUI();
+  flashMoney(`Money set to ${fmt(state.money)}`);
+});
+
+// lock admin / forget code (clears adminUnlocked)
+ADMIN_LOCK_BTN.addEventListener('click', ()=>{
+  state.adminUnlocked = false;
+  saveState();
+  closeAdmin();
+  flashMoney('Admin locked (code forgotten)');
+});
+
+// admin overlay close
+CLOSE_ADMIN.addEventListener('click', closeAdmin);
+ADMIN_OVERLAY.addEventListener('click', (e)=>{ if (e.target === ADMIN_OVERLAY) closeAdmin(); });
+AUTH_OVERLAY.addEventListener('click', (e)=>{ if (e.target === AUTH_OVERLAY) closeAuth(); });
+
 // initial compute & render
 recomputeFromPurchased();
 updateMoneyUI();
@@ -451,4 +559,10 @@ if (CLICKER.animate){
     { transform: 'translateY(-6px)' },
     { transform: 'translateY(0)' }
   ], { duration: 900, iterations: 1, easing: 'ease-out' });
+}
+
+// If admin was previously unlocked, keep admin available
+if (state.adminUnlocked){
+  // Optionally show a subtle flash that admin is available
+  console.log('Admin unlocked (persisted)');
 }
