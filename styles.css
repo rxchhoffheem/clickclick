@@ -246,6 +246,28 @@ body{
 /* danger btn */
 .buy-btn.danger{ background: linear-gradient(180deg,#ff9b9b,#ff6b6b); color:#201; }
 
+/* floating admin button (red) */
+.fab{
+  position:fixed;
+  right:20px;
+  bottom:20px;
+  width:56px;
+  height:56px;
+  border-radius:999px;
+  border:none;
+  cursor:pointer;
+  background: linear-gradient(180deg, #ff3b3b, #e31b1b);
+  box-shadow: 0 10px 30px rgba(227,27,27,0.28);
+  z-index:80;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+  color:#070707;
+  font-size:13px;
+}
+.fab:hover{ transform:translateY(-3px); }
+
 /* responsive */
 @media (max-width:640px){
   .upgrades-list{ grid-template-columns: 1fr; }
