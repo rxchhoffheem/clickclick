@@ -102,6 +102,54 @@
     </div>
   </div>
 
+  <!-- Admin auth overlay (enter code) -->
+  <div id="auth-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <div class="shop-header">
+        <h2 id="auth-title">Enter Admin Code</h2>
+        <button id="close-auth" class="close-btn" aria-label="Close">✕</button>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <input id="auth-input" type="text" placeholder="Enter code" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--text);font-weight:700" />
+        <button id="auth-submit" class="buy-btn">Submit</button>
+      </div>
+
+      <div style="margin-top:10px;color:var(--muted);font-size:13px;">Tip: you can also press the red admin button in the bottom-right.</div>
+    </div>
+  </div>
+
+  <!-- Admin panel overlay (visible after successful code) -->
+  <div id="admin-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+      <div class="shop-header">
+        <h2 id="admin-title">ADMIN COMMANDS</h2>
+        <button id="close-admin" class="close-btn" aria-label="Close admin">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+        <div style="color:var(--muted);font-size:13px;">Use carefully — changes are applied immediately and persisted.</div>
+
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="admin-add-input" type="number" placeholder="Amount to add (e.g. 1000)" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--text);font-weight:700" />
+          <button id="admin-add-btn" class="buy-btn">Add Money</button>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="admin-set-btn" class="ghost-btn">Set Money</button>
+          <input id="admin-set-input" type="number" placeholder="Set exact money value" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:var(--text);font-weight:700" />
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button id="admin-lock-btn" class="ghost-btn">Lock Admin (forget code)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- floating admin button -->
+  <button id="admin-toggle-btn" class="fab" title="Admin"></button>
+
   <script src="script.js"></script>
 </body>
 </html>
