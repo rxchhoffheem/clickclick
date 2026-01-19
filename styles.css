@@ -239,6 +239,22 @@ body{
 }
 .badge.locked{ opacity:0.45; }
 
+/* progress bar (events) */
+.progress {
+  background: rgba(255,255,255,0.03);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.02);
+  margin-top:8px;
+}
+.progress > .bar {
+  height:100%;
+  background: linear-gradient(90deg,#39ffb0,#1ec8a8);
+  width:0%;
+  transition: width 300ms ease;
+}
+
 /* ghost close */
 .ghost-btn{
   background:transparent;
