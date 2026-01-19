@@ -3,33 +3,35 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>heem was here</title>
+  <title>Heem's Clicking Game</title>
   <link rel="stylesheet" href="styles.css">
+  <meta name="description" content="A lightweight, mobile-friendly clicking game with upgrades, badges and rebirths." />
 </head>
 <body>
-  <main class="game">
+  <main class="game" role="main" aria-labelledby="game-title">
     <header class="header">
       <div style="display:flex;align-items:center;gap:12px;">
-        <h1 class="title">Heems Clicking Game</h1>
-        <div id="rebirth-info" class="rebirth-info">Rebirths: <span id="rebirth-count">0</span> (<span id="rebirth-mul">x1.0</span>)</div>
+        <h1 id="game-title" class="title">Heem's Clicking Game</h1>
+        <div id="rebirth-info" class="rebirth-info" aria-live="polite">Rebirths: <span id="rebirth-count">0</span> (<span id="rebirth-mul">x1.0</span>)</div>
       </div>
 
       <div style="display:flex;gap:8px;align-items:center;">
-        <button id="open-shop" class="shop-toggle">Upgrades Shop</button>
-        <button id="open-badges" class="shop-toggle">Badges</button>
-        <button id="open-rebirth" class="shop-toggle danger">Rebirth</button>
+        <button id="open-shop" class="shop-toggle" aria-haspopup="dialog">Upgrades Shop</button>
+        <button id="open-badges" class="shop-toggle" aria-haspopup="dialog">Badges</button>
+        <button id="open-rebirth" class="shop-toggle danger" aria-haspopup="dialog">Rebirth</button>
+        <button id="open-settings" class="shop-toggle" aria-haspopup="dialog" title="Settings">⚙️</button>
       </div>
     </header>
 
     <div class="panel">
       <div class="top-row">
-        <div id="money" class="money">$0</div>
+        <div id="money" class="money" aria-live="polite">$0</div>
         <div id="cps" class="cps">0 /s</div>
       </div>
 
-      <button id="clicker" class="btn">click me</button>
+      <button id="clicker" class="btn" aria-pressed="false" aria-label="Click to earn money">click me</button>
 
-      <div class="info">Every click = +$1 — Press space to click — Press S to open shop</div>
+      <div class="info">Tap the button (or press Space). Tip: long-press Buy buttons to purchase max on mobile, or Shift+Click on desktop.</div>
     </div>
   </main>
 
@@ -102,6 +104,25 @@
     </div>
   </div>
 
+  <!-- Settings modal (new) -->
+  <div id="settings-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="shop-header">
+        <h2 id="settings-title">Settings</h2>
+        <button id="close-settings" class="close-btn">✕</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;padding-top:6px;">
+        <label><input id="toggle-vibrate" type="checkbox" /> Enable vibration (mobile)</label>
+        <label><input id="toggle-sound" type="checkbox" /> Enable sound effects</label>
+        <label>Offline accrual cap (minutes): <input id="offline-cap" type="number" min="0" step="1" value="60" style="width:80px;margin-left:8px" /></label>
+        <div style="color:var(--muted);font-size:13px">Long-press Buy buttons to purchase as many levels as you can afford on mobile.</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px">
+        <button id="close-settings" class="ghost-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Admin auth overlay (enter code) -->
   <div id="auth-overlay" class="overlay hidden" aria-hidden="true">
     <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="auth-title">
@@ -148,7 +169,7 @@
   </div>
 
   <!-- floating admin button -->
-  <button id="admin-toggle-btn" class="fab" title="Admin"></button>
+  <button id="admin-toggle-btn" class="fab" title="Admin" aria-label="Admin"></button>
 
   <script src="script.js"></script>
 </body>
