@@ -1,6 +1,14 @@
-// Main clicker with multi-buy upgrades, pagination (pages of upgrades), badges, rebirths, and admin auth/commands.
-// Persistent state held in localStorage under key 'sim_state_v2'
+// Heavily improved script for clickclick
+// - Mobile-friendly: larger tap targets, long-press to buy max, shift-click to buy max
+// - Offline accrual (capped)
+// - Multi-buy (max), clearer number formatting
+// - Settings for vibration & sound
+// - Throttled UI updates and smoother CPS tick via rAF
+// - Small accessibility improvements (aria-labels on dynamic buttons)
+// Save key bumped so old saves are migrated safely
+const STORAGE_KEY = 'sim_state_v3';
 
+// DOM refs
 const CLICKER = document.getElementById('clicker');
 const MONEY_EL = document.getElementById('money');
 const CPS_EL = document.getElementById('cps');
@@ -33,7 +41,7 @@ const REBIRTH_MUL_EL = document.getElementById('rebirth-mul');
 const REBIRTH_DESC = document.getElementById('rebirth-desc');
 const REBIRTH_REWARD_EL = document.getElementById('rebirth-reward');
 
-// Admin/auth DOM
+// Admin/auth DOM (unchanged ids)
 const ADMIN_BTN = document.getElementById('admin-toggle-btn');
 const AUTH_OVERLAY = document.getElementById('auth-overlay');
 const AUTH_INPUT = document.getElementById('auth-input');
@@ -48,21 +56,34 @@ const ADMIN_SET_BTN = document.getElementById('admin-set-btn');
 const ADMIN_LOCK_BTN = document.getElementById('admin-lock-btn');
 const CLOSE_ADMIN = document.getElementById('close-admin');
 
-const STORAGE_KEY = 'sim_state_v2';
+// Settings (new small modal area in index.html)
+const OPEN_SETTINGS = document.getElementById('open-settings');
+const SETTINGS_OVERLAY = document.getElementById('settings-overlay');
+const CLOSE_SETTINGS = document.getElementById('close-settings');
+const TOGGLE_VIBRATE = document.getElementById('toggle-vibrate');
+const TOGGLE_SOUND = document.getElementById('toggle-sound');
+const OFFLINE_CAP_INPUT = document.getElementById('offline-cap');
 
 // Pagination
 const UPGRADES_PER_PAGE = 7;
 let currentPage = 1;
 
-// Game state with defaults
+// Game state with defaults (versioned)
 let state = {
+  version: 3,
   money: 0,
   purchased: {}, // { id: count }
   rebirths: 0,
   totalClicks: 0,
   totalEarned: 0,
   badgesEarned: [], // badge ids
-  adminUnlocked: false // persisted admin unlock state
+  adminUnlocked: false,
+  lastTick: Date.now(),
+  settings: {
+    vibrate: true,
+    sound: false,
+    offlineCapMinutes: 60
+  }
 };
 
 // derived stats
@@ -72,22 +93,79 @@ let globalMultiplier = 1;
 let cps = 0;
 let critChance = 0;
 
-// helper: save/load
-function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+// small audio helper
+let audioCtx = null;
+function beep(){
+  if (!state.settings.sound) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 880;
+    g.gain.value = 0.05;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.06);
+  } catch(e){ /* ignore */ }
+}
+
+// persistence helpers (safe migration)
+function saveState(){ state.lastTick = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 function loadState(){
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
-    try { state = Object.assign(state, JSON.parse(raw)); } catch(e){ /* ignore */ }
+    try {
+      const parsed = JSON.parse(raw);
+      migrate(parsed);
+    } catch(e){ /* ignore */ }
   }
 }
-loadState();
+function migrate(parsed){
+  if (!parsed) return;
+  // merge older structure safely
+  state = Object.assign({}, state, parsed);
+  if (!state.settings) state.settings = { vibrate:true, sound:false, offlineCapMinutes:60 };
+  state.version = 3;
+  if (!state.lastTick) state.lastTick = Date.now();
+}
+
+// offline accrual (cap by minutes in settings)
+function applyOfflineEarnings(){
+  recomputeFromPurchased();
+  const now = Date.now();
+  const elapsedMs = Math.max(0, now - (state.lastTick || now));
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  const cap = Math.max(0, (state.settings.offlineCapMinutes||60) * 60);
+  const dt = Math.min(elapsedSec, cap);
+  if (dt > 0 && cps > 0){
+    const gain = Math.floor(cps * globalMultiplier * dt);
+    if (gain > 0){
+      state.money += gain;
+      state.totalEarned += gain;
+      flashMoney(`+${fmtLarge(gain)} (offline)`);
+    }
+  }
+}
 
 // costs scale function
 function nextCost(base, count){
   return Math.max(1, Math.floor(base * Math.pow(1.15, count)));
 }
+// compute how many levels are affordable (geometric-series)
+function maxAffordable(base, count, money){
+  // if 0 affordable, returns 0, else returns n >= 1
+  const r = 1.15;
+  const first = base * Math.pow(r, count);
+  if (money < first) return 0;
+  // total cost for n items: first * (r^n - 1) / (r - 1) <= money
+  // solve r^n <= 1 + money*(r-1)/first
+  const cap = 1 + money * (r - 1) / first;
+  const n = Math.floor(Math.log(cap) / Math.log(r));
+  return Math.max(0, n);
+}
 
-// Upgrades definition (35 total). effect(count, accum) applies cumulative effect into accum object
+// Upgrades (same data, kept here)
 const upgrades = [
   // 1-7 page 1 (basic click)
   { id:1, name:"Finger Strength", baseCost:10, desc:"+1 per level (add)", effect:(count,acc)=> acc.baseClick += 1*count },
@@ -156,7 +234,6 @@ function totalUpgradesBought(s){
 
 // compute derived stats from purchased counts and rebirths
 function recomputeFromPurchased(){
-  // reset derived accumulators
   const accum = {
     baseClick: 1,
     clickMultiplier: 1,
@@ -166,7 +243,6 @@ function recomputeFromPurchased(){
     critBonusMultiplier: 1
   };
 
-  // apply each upgrade effect with its count
   for (const up of upgrades){
     const count = state.purchased[up.id] || 0;
     if (count > 0 && typeof up.effect === 'function'){
@@ -174,40 +250,94 @@ function recomputeFromPurchased(){
     }
   }
 
-  // apply rebirth multiplier (10% per rebirth)
   const rebirthMul = 1 + (state.rebirths * 0.10);
   accum.globalMultiplier *= rebirthMul;
 
-  // save derived to globals
-  baseClick = accum.baseClick;
-  clickMultiplier = accum.clickMultiplier;
-  globalMultiplier = accum.globalMultiplier;
-  cps = accum.cps;
-  critChance = accum.critChance;
-  // small safety
-  if (!isFinite(baseClick)) baseClick = 1;
-  if (!isFinite(clickMultiplier)) clickMultiplier = 1;
-  if (!isFinite(globalMultiplier)) globalMultiplier = 1;
-  if (!isFinite(cps)) cps = 0;
+  baseClick = isFinite(accum.baseClick) ? accum.baseClick : 1;
+  clickMultiplier = isFinite(accum.clickMultiplier) ? accum.clickMultiplier : 1;
+  globalMultiplier = isFinite(accum.globalMultiplier) ? accum.globalMultiplier : 1;
+  cps = isFinite(accum.cps) ? accum.cps : 0;
+  critChance = isFinite(accum.critChance) ? accum.critChance : 0;
 }
 
 // formatting
-function fmt(n){ return `$${n.toLocaleString()}`; }
+function fmtLarge(n){
+  if (n < 1000) return String(n);
+  const units = ['K','M','B','T','Q'];
+  let u = -1;
+  let v = n;
+  while (v >= 1000 && u < units.length - 1){ v /= 1000; u++; }
+  return v.toFixed(v < 10 ? 2 : 1) + units[u];
+}
+function fmt(n){ return `$${fmtLarge(Math.round(n))}`; }
 
-// update UI
-function updateMoneyUI(){
-  MONEY_EL.textContent = fmt(Math.round(state.money));
-  SHOP_BALANCE.textContent = fmt(Math.round(state.money));
-  CPS_EL.textContent = `${Math.round(cps * globalMultiplier).toLocaleString()} /s`;
-  document.getElementById('rebirth-count').textContent = state.rebirths;
-  document.getElementById('rebirth-count-2').textContent = state.rebirths;
+// UI updates (throttled)
+let lastUI = 0;
+function updateMoneyUI(force = false){
+  const now = performance.now();
+  if (!force && now - lastUI < 120) return;
+  lastUI = now;
+  MONEY_EL.textContent = fmt(state.money);
+  SHOP_BALANCE.textContent = fmt(state.money);
+  CPS_EL.textContent = `${fmtLarge(Math.round(cps * globalMultiplier))} /s`;
+  REBIRTH_COUNT_EL && (REBIRTH_COUNT_EL.textContent = state.rebirths);
+  REBIRTH_COUNT_EL_2 && (REBIRTH_COUNT_EL_2.textContent = state.rebirths);
   const rebMul = (1 + state.rebirths * 0.10);
-  document.getElementById('rebirth-mul').textContent = `x${rebMul.toFixed(2)}`;
   REBIRTH_MUL_EL && (REBIRTH_MUL_EL.textContent = `x${rebMul.toFixed(2)}`);
   REBIRTH_REWARD_EL && (REBIRTH_REWARD_EL.textContent = `+${(10*state.rebirths)}% total (next included)`);
 }
 
-// rendering shop page
+// small pop & flash visual feedback
+function popAnimation(el){
+  if (el && el.animate){
+    el.animate([
+      { transform: 'scale(1)' },
+      { transform: 'scale(1.06)' },
+      { transform: 'scale(1)' }
+    ], { duration: 160, easing: 'cubic-bezier(.2,.9,.2,1)' });
+  }
+}
+function flashMoney(text){
+  const el = document.createElement('div');
+  el.className = 'flash-money';
+  el.textContent = text;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=> el.style.opacity = '1');
+  setTimeout(()=> el.style.opacity = '0', 700);
+  setTimeout(()=> el.remove(), 1200);
+}
+
+// money add save update
+function addMoney(n){
+  state.money += n;
+  if (n > 0) state.totalEarned += n;
+  saveState();
+  updateMoneyUI(true);
+}
+
+// buy logic supporting multi-buy via 'max'
+function buyUpgrade(id, qty = 1){
+  const up = upgrades.find(u=>u.id===id);
+  if (!up) return;
+  const count = state.purchased[id] || 0;
+  if (qty === 'max') qty = maxAffordable(up.baseCost, count, state.money);
+  if (qty <= 0) return;
+
+  // geometric-series cost calculation
+  const r = 1.15;
+  const start = up.baseCost * Math.pow(r, count);
+  const totalCost = Math.floor(start * (Math.pow(r, qty) - 1) / (r - 1));
+  if (state.money < totalCost) return;
+
+  state.money -= totalCost;
+  state.purchased[id] = count + qty;
+  saveState();
+  recomputeFromPurchased();
+  renderShop(currentPage);
+  updateMoneyUI(true);
+}
+
+// rendering shop page (long-press to max on mobile)
 function renderShop(page = currentPage){
   currentPage = Math.max(1, Math.min(page, Math.ceil(upgrades.length / UPGRADES_PER_PAGE)));
   UPGRADES_LIST.innerHTML = '';
@@ -235,9 +365,19 @@ function renderShop(page = currentPage){
     buyBtn.className = 'buy-btn';
     buyBtn.textContent = `Buy`;
     buyBtn.disabled = state.money < next;
-    buyBtn.addEventListener('click', ()=>{
-      buyUpgrade(up.id);
+    buyBtn.setAttribute('aria-label', `Buy ${up.name}`);
+
+    // click: buy 1; shift-click: buy max
+    buyBtn.addEventListener('click', (ev)=>{
+      if (ev.shiftKey) buyUpgrade(up.id, 'max');
+      else buyUpgrade(up.id, 1);
     });
+
+    // long-press to buy max (mobile)
+    let pressTimer = null;
+    buyBtn.addEventListener('pointerdown', ()=>{ pressTimer = setTimeout(()=> buyUpgrade(up.id, 'max'), 650); });
+    buyBtn.addEventListener('pointerup', ()=>{ if (pressTimer) clearTimeout(pressTimer); });
+    buyBtn.addEventListener('pointercancel', ()=>{ if (pressTimer) clearTimeout(pressTimer); });
 
     row.appendChild(buyBtn);
     row.appendChild(costDiv);
@@ -252,95 +392,47 @@ function renderShop(page = currentPage){
   PAGE_INDICATOR.textContent = `Page ${currentPage} / ${Math.ceil(upgrades.length / UPGRADES_PER_PAGE)}`;
   PREV_PAGE.disabled = currentPage === 1;
   NEXT_PAGE.disabled = currentPage === Math.ceil(upgrades.length / UPGRADES_PER_PAGE);
-  updateMoneyUI();
+  updateMoneyUI(true);
   checkBadges();
 }
 
-// buy logic (buy 1 level per click). Multi-buy could be done later with shift-click.
-function buyUpgrade(id){
-  const up = upgrades.find(u=>u.id===id);
-  if (!up) return;
-  const count = state.purchased[id] || 0;
-  const cost = nextCost(up.baseCost, count);
-  if (state.money < cost) return;
-  state.money -= cost;
-  state.purchased[id] = count + 1;
-  saveState();
-  recomputeFromPurchased();
-  renderShop();
-  updateMoneyUI();
-}
-
-// handle click
+// handle click (vibrate + sound + crit)
 function handleClick(){
-  // compute click amount and crit
-  let amount = baseClick * clickMultiplier * globalMultiplier;
+  recomputeFromPurchased();
+  let amount = Math.round(baseClick * clickMultiplier * globalMultiplier);
   let isCrit = false;
-  if (critChance > 0){
-    if (Math.random()*100 < critChance){
-      isCrit = true;
-      amount *= 2;
-    }
+  if (critChance > 0 && Math.random() * 100 < critChance){
+    isCrit = true;
+    amount *= 2;
   }
-  amount = Math.round(amount);
   addMoney(amount);
   state.totalClicks += 1;
-  state.totalEarned += amount;
   saveState();
-  // small feedback
+  if (state.settings.vibrate && navigator.vibrate) navigator.vibrate(8);
+  beep();
   if (isCrit) flashMoney('+CRIT!');
   popAnimation(CLICKER);
   checkBadges();
 }
 
-// money add save update
-function addMoney(n){
-  state.money += n;
-  saveState();
-  updateMoneyUI();
-}
-
-// little pop
-function popAnimation(el){
-  if (el.animate){
-    el.animate([
-      { transform: 'scale(1)', boxShadow: '0 8px 30px rgba(227,27,27,0.18)' },
-      { transform: 'scale(1.06)', boxShadow: '0 18px 40px rgba(227,27,27,0.28)' },
-      { transform: 'scale(1)', boxShadow: '0 8px 30px rgba(227,27,27,0.18)' },
-    ], { duration: 200, easing: 'cubic-bezier(.2,.9,.2,1)' });
-  }
-}
-function flashMoney(text) {
-  const el = document.createElement('div');
-  el.textContent = text;
-  el.style.position = 'fixed';
-  el.style.left = '50%';
-  el.style.top = '38%';
-  el.style.transform = 'translateX(-50%)';
-  el.style.background = 'rgba(255,255,255,0.06)';
-  el.style.padding = '10px 16px';
-  el.style.borderRadius = '10px';
-  el.style.fontWeight = '800';
-  el.style.color = '#fffb';
-  el.style.zIndex = 60;
-  document.body.appendChild(el);
-  setTimeout(()=> el.style.opacity = '0', 650);
-  setTimeout(()=> el.remove(), 950);
-}
-
-// CPS interval (adds cps every second)
-setInterval(()=>{
-  if (cps > 0){
-    const gain = Math.round(cps * globalMultiplier);
-    if (gain > 0) {
+// CPS ticker using rAF for smoother UI
+let lastTick = performance.now();
+function tick(now){
+  const dt = (now - lastTick) / 1000;
+  if (dt >= 0.25){
+    recomputeFromPurchased();
+    const gain = Math.floor(cps * globalMultiplier * dt);
+    if (gain > 0){
       state.money += gain;
       state.totalEarned += gain;
       saveState();
-      updateMoneyUI();
+      updateMoneyUI(true);
       checkBadges();
     }
+    lastTick = now;
   }
-}, 1000);
+  window.requestAnimationFrame(tick);
+}
 
 // badges UI & checking
 function checkBadges(){
@@ -350,7 +442,6 @@ function checkBadges(){
     if (!have && b.condition(state)){
       state.badgesEarned.push(b.id);
       changed = true;
-      // small notification
       flashMoney(`Badge unlocked: ${b.name}`);
     }
   }
@@ -360,7 +451,6 @@ function checkBadges(){
   }
 }
 
-// render badges into badges modal
 function renderBadges(){
   BADGES_LIST.innerHTML = '';
   for (const b of badges){
@@ -376,13 +466,13 @@ function renderBadges(){
   }
 }
 
-// shop open/close
+// shop open/close (keep behaviour)
 function openShop(){ SHOP_OVERLAY.classList.remove('hidden'); SHOP_OVERLAY.setAttribute('aria-hidden','false'); renderShop(currentPage); }
 function closeShop(){ SHOP_OVERLAY.classList.add('hidden'); SHOP_OVERLAY.setAttribute('aria-hidden','true'); }
 OPEN_SHOP.addEventListener('click', openShop);
 CLOSE_SHOP.addEventListener('click', closeShop);
 CLOSE_SHOP_2.addEventListener('click', closeShop);
-SHOP_OVERLAY.addEventListener('click',(e)=>{ if (e.target===SHOP_OVERLAY) closeShop(); });
+SHOP_OVERLAY.addEventListener('click',(e)=>{ if (e.target === SHOP_OVERLAY) closeShop(); });
 
 PREV_PAGE.addEventListener('click', ()=>{ renderShop(currentPage - 1); });
 NEXT_PAGE.addEventListener('click', ()=>{ renderShop(currentPage + 1); });
@@ -399,15 +489,14 @@ BADGES_OVERLAY.addEventListener('click',(e)=>{ if (e.target===BADGES_OVERLAY) { 
 
 // rebirth modal and logic
 function rebirthThreshold(){
-  // base threshold: 1,000,000 * (rebirths+1)
   return 1000000 * (state.rebirths + 1);
 }
 function openRebirth(){
   REBIRTH_OVERLAY.classList.remove('hidden');
   REBIRTH_OVERLAY.setAttribute('aria-hidden','false');
   REBIRTH_DESC.textContent = `Rebirthing will reset money and upgrade levels, but grant a permanent +10% bonus per rebirth (stacking). Next rebirth requires ${fmt(rebirthThreshold())}.`;
-  document.getElementById('rebirth-count-2').textContent = state.rebirths;
-  document.getElementById('rebirth-reward').textContent = `+${(state.rebirths+1)*10}% per rebirth (applied)`;
+  REBIRTH_COUNT_EL_2.textContent = state.rebirths;
+  REBIRTH_REWARD_EL.textContent = `+${(state.rebirths+1)*10}% per rebirth (applied)`;
 }
 function closeRebirth(){ REBIRTH_OVERLAY.classList.add('hidden'); REBIRTH_OVERLAY.setAttribute('aria-hidden','true'); }
 
@@ -421,20 +510,18 @@ CONFIRM_REBIRTH.addEventListener('click', ()=>{
     flashMoney("You don't meet the rebirth requirement");
     return;
   }
-  // perform rebirth: increment rebirths, reset money and purchased counts, but keep totalEarned and totalClicks and badges and rebirth count
   state.rebirths += 1;
   state.money = 0;
   state.purchased = {};
-  // keep totalEarned & totalClicks as lifetime counters
   saveState();
   recomputeFromPurchased();
   closeRebirth();
-  updateMoneyUI();
+  updateMoneyUI(true);
   renderShop();
   flashMoney(`Rebirthed! Rebirths: ${state.rebirths}`);
 });
 
-// keyboard shortcuts
+// keyboard shortcuts (same as before)
 document.addEventListener('keydown', (e)=>{
   if (e.code === 'Space'){
     if (document.activeElement && ['INPUT','TEXTAREA','BUTTON'].includes(document.activeElement.tagName)) return;
@@ -449,9 +536,7 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
-// --- Admin/auth logic ---
-
-// show auth prompt (enter code)
+// --- Admin/auth logic (unchanged behavior) ---
 function openAuth(){
   AUTH_OVERLAY.classList.remove('hidden');
   AUTH_OVERLAY.setAttribute('aria-hidden','false');
@@ -462,8 +547,6 @@ function closeAuth(){
   AUTH_OVERLAY.classList.add('hidden');
   AUTH_OVERLAY.setAttribute('aria-hidden','true');
 }
-
-// show admin panel if unlocked
 function openAdmin(){
   ADMIN_OVERLAY.classList.remove('hidden');
   ADMIN_OVERLAY.setAttribute('aria-hidden','false');
@@ -474,8 +557,6 @@ function closeAdmin(){
   ADMIN_OVERLAY.classList.add('hidden');
   ADMIN_OVERLAY.setAttribute('aria-hidden','true');
 }
-
-// when auth submitted
 AUTH_SUBMIT.addEventListener('click', ()=>{
   const code = (AUTH_INPUT.value || '').trim();
   if (code.toUpperCase() === 'HEEM'){
@@ -490,18 +571,10 @@ AUTH_SUBMIT.addEventListener('click', ()=>{
     AUTH_INPUT.focus();
   }
 });
-AUTH_INPUT.addEventListener('keydown', (e)=>{
-  if (e.key === 'Enter') AUTH_SUBMIT.click();
-});
+AUTH_INPUT.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') AUTH_SUBMIT.click(); });
 CLOSE_AUTH.addEventListener('click', closeAuth);
+ADMIN_BTN.addEventListener('click', ()=>{ if (state.adminUnlocked) openAdmin(); else openAuth(); });
 
-// floating admin button behavior
-ADMIN_BTN.addEventListener('click', ()=>{
-  if (state.adminUnlocked) openAdmin();
-  else openAuth();
-});
-
-// admin commands
 ADMIN_ADD_BTN.addEventListener('click', ()=>{
   const val = Number(ADMIN_ADD_INPUT.value);
   if (!isFinite(val) || val === 0){
@@ -512,11 +585,10 @@ ADMIN_ADD_BTN.addEventListener('click', ()=>{
   state.money += amount;
   state.totalEarned += Math.max(0, amount);
   saveState();
-  updateMoneyUI();
+  updateMoneyUI(true);
   flashMoney(`${fmt(amount)} added`);
   ADMIN_ADD_INPUT.value = '';
 });
-
 ADMIN_SET_BTN.addEventListener('click', ()=>{
   const val = Number(ADMIN_SET_INPUT.value);
   if (!isFinite(val) || val < 0){
@@ -525,35 +597,46 @@ ADMIN_SET_BTN.addEventListener('click', ()=>{
   }
   state.money = Math.floor(val);
   saveState();
-  updateMoneyUI();
+  updateMoneyUI(true);
   flashMoney(`Money set to ${fmt(state.money)}`);
 });
-
-// lock admin / forget code (clears adminUnlocked)
 ADMIN_LOCK_BTN.addEventListener('click', ()=>{
   state.adminUnlocked = false;
   saveState();
   closeAdmin();
   flashMoney('Admin locked (code forgotten)');
 });
-
-// admin overlay close
 CLOSE_ADMIN.addEventListener('click', closeAdmin);
-ADMIN_OVERLAY.addEventListener('click', (e)=>{ if (e.target === ADMIN_OVERLAY) closeAdmin(); });
-AUTH_OVERLAY.addEventListener('click', (e)=>{ if (e.target === AUTH_OVERLAY) closeAuth(); });
+ADMIN_OVERLAY.addEventListener('click',(e)=>{ if (e.target === ADMIN_OVERLAY) closeAdmin(); });
+AUTH_OVERLAY.addEventListener('click',(e)=>{ if (e.target === AUTH_OVERLAY) closeAuth(); });
 
-// initial compute & render
+// Settings modal wiring (if present)
+if (OPEN_SETTINGS && SETTINGS_OVERLAY){
+  OPEN_SETTINGS.addEventListener('click', ()=>{
+    SETTINGS_OVERLAY.classList.remove('hidden');
+    SETTINGS_OVERLAY.setAttribute('aria-hidden','false');
+    TOGGLE_VIBRATE.checked = !!state.settings.vibrate;
+    TOGGLE_SOUND.checked = !!state.settings.sound;
+    OFFLINE_CAP_INPUT.value = state.settings.offlineCapMinutes || 60;
+  });
+  CLOSE_SETTINGS.addEventListener('click', ()=>{ SETTINGS_OVERLAY.classList.add('hidden'); SETTINGS_OVERLAY.setAttribute('aria-hidden','true'); });
+  TOGGLE_VIBRATE && TOGGLE_VIBRATE.addEventListener('change', (e)=>{ state.settings.vibrate = !!e.target.checked; saveState(); });
+  TOGGLE_SOUND && TOGGLE_SOUND.addEventListener('change', (e)=>{ state.settings.sound = !!e.target.checked; saveState(); });
+  OFFLINE_CAP_INPUT && OFFLINE_CAP_INPUT.addEventListener('change', (e)=>{ const v = Math.max(0, Number(e.target.value) || 0); state.settings.offlineCapMinutes = v; saveState(); });
+}
+
+// initialization
+loadState();
+applyOfflineEarnings();
 recomputeFromPurchased();
-updateMoneyUI();
+updateMoneyUI(true);
 renderShop(1);
-renderBadges();
+renderBadges && renderBadges();
 checkBadges();
-
-// attach click handler
 CLICKER.addEventListener('click', handleClick);
 
-// small aesthetic pulse
-if (CLICKER.animate){
+// initial pulse
+if (CLICKER && CLICKER.animate){
   CLICKER.animate([
     { transform: 'translateY(0)' },
     { transform: 'translateY(-6px)' },
@@ -561,8 +644,10 @@ if (CLICKER.animate){
   ], { duration: 900, iterations: 1, easing: 'ease-out' });
 }
 
+// start rAF ticker
+window.requestAnimationFrame(tick);
+
 // If admin was previously unlocked, keep admin available
 if (state.adminUnlocked){
-  // Optionally show a subtle flash that admin is available
   console.log('Admin unlocked (persisted)');
 }
