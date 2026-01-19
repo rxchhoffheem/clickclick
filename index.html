@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Heem's Clicking Game</title>
   <link rel="stylesheet" href="styles.css">
-  <meta name="description" content="A lightweight, mobile-friendly clicking game with upgrades, badges and rebirths." />
+  <meta name="description" content="A lightweight, mobile-friendly clicking game with upgrades, badges, events and leaderboards." />
 </head>
 <body>
   <main class="game" role="main" aria-labelledby="game-title">
@@ -19,6 +19,8 @@
         <button id="open-shop" class="shop-toggle" aria-haspopup="dialog">Upgrades Shop</button>
         <button id="open-badges" class="shop-toggle" aria-haspopup="dialog">Badges</button>
         <button id="open-rebirth" class="shop-toggle danger" aria-haspopup="dialog">Rebirth</button>
+        <button id="open-events" class="shop-toggle" aria-haspopup="dialog" title="Events">Events</button>
+        <button id="open-leaderboard" class="shop-toggle" aria-haspopup="dialog" title="Leaderboards">Leaderboard</button>
         <button id="open-settings" class="shop-toggle" aria-haspopup="dialog" title="Settings">⚙️</button>
       </div>
     </header>
@@ -104,7 +106,52 @@
     </div>
   </div>
 
-  <!-- Settings modal (new) -->
+  <!-- Events modal (new) -->
+  <div id="events-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="events-title">
+      <div class="shop-header">
+        <h2 id="events-title">Active Event</h2>
+        <button id="close-events" class="close-btn" aria-label="Close events">✕</button>
+      </div>
+
+      <div id="events-body" style="padding-top:6px;">
+        <!-- event content inserted here -->
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button id="close-events-2" class="ghost-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard modal (new) -->
+  <div id="leaderboard-overlay" class="overlay hidden" aria-hidden="true">
+    <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title">
+      <div class="shop-header">
+        <h2 id="leaderboard-title">Leaderboards</h2>
+        <button id="close-leaderboard" class="close-btn" aria-label="Close leaderboards">✕</button>
+      </div>
+
+      <div style="padding-top:6px;">
+        <div style="margin-bottom:8px;">
+          <strong>Your name:</strong>
+          <input id="leader-name" type="text" placeholder="Player" style="margin-left:8px;padding:6px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--text)" />
+          <button id="submit-local-score" class="buy-btn" style="margin-left:8px">Submit Score</button>
+        </div>
+
+        <div style="margin-bottom:10px;color:var(--muted);">Local leaderboard (top 10 by total earned). Optionally configure a remote leaderboard URL in Settings and submit there.</div>
+
+        <div id="leaderboard-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto;"></div>
+
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+        <button id="close-leaderboard-2" class="ghost-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal (updated) -->
   <div id="settings-overlay" class="overlay hidden" aria-hidden="true">
     <div class="shop-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div class="shop-header">
@@ -115,10 +162,12 @@
         <label><input id="toggle-vibrate" type="checkbox" /> Enable vibration (mobile)</label>
         <label><input id="toggle-sound" type="checkbox" /> Enable sound effects</label>
         <label>Offline accrual cap (minutes): <input id="offline-cap" type="number" min="0" step="1" value="60" style="width:80px;margin-left:8px" /></label>
-        <div style="color:var(--muted);font-size:13px">Long-press Buy buttons to purchase as many levels as you can afford on mobile.</div>
+        <label>Remote leaderboard endpoint (optional): <input id="remote-leaderboard-endpoint" type="text" placeholder="https://example.com/submit" style="width:100%;padding:6px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--text)" /></label>
+        <div style="color:var(--muted);font-size:13px">If you provide a remote endpoint that accepts JSON { name, score, when }, the game will attempt to POST there when you submit a remote score.</div>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:12px">
-        <button id="close-settings" class="ghost-btn">Close</button>
+        <button id="save-settings" class="buy-btn">Save</button>
+        <button id="close-settings-2" class="ghost-btn" style="margin-left:8px">Close</button>
       </div>
     </div>
   </div>
